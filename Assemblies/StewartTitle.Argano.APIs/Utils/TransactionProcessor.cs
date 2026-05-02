@@ -1019,6 +1019,7 @@ namespace StewartTitle.Argano.APIs.Utils
                 phoneNumberEntity["stt_addresstypecode"] = new OptionSetValue(924510002);   // Phone
                 phoneNumberEntity["stt_isprimary"] = isPrimary;
 
+
                 service.Create(phoneNumberEntity);
 
                 tracingService.Trace("Phone Number created.");
