@@ -1,0 +1,23 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/21fbbe67-215b-4d79-888e-b91226762695.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/623249e7-3317-480d-a7e5-d9ce5b610b27.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/70b9fc92-54f9-4582-b201-ab0837c42fb7.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/83b2ca6c-c048-4185-a6bd-d925e8c732dc.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/cb9d5eea-ac0b-4fa4-b0ac-6b658f4bc8be.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/fe4d4df2-34d2-455d-857a-da954d8eb1cf.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/623249e7-3317-480d-a7e5-d9ce5b610b27.vsidx
+/.vs/StewartTitle.Argano.Plugins/FileContentIndex/623249e7-3317-480d-a7e5-d9ce5b610b27.vsidx
+/StewartTitle.Argano.APIs/StewartD365InboundTPS.cs
+/StewartTitle.Argano.APIs/obj/Debug/DesignTimeResolveAssemblyReferencesInput.cache
+/StewartTitle.Argano.APIs/obj/Debug/StewartTitle.Argano.APIs.csproj.AssemblyReference.cache
+/StewartTitle.Argano.APIs/obj/Debug/StewartTitle.Argano.APIs.csproj.CoreCompileInputs.cache
+/StewartTitle.Argano.APIs/obj/Debug/StewartTitle.Argano.APIs.csproj.FileListAbsolute.txt
+/StewartTitle.Argano.APIs/obj/Debug/StewartTitle.Argano.APIs.dll
+/StewartTitle.Argano.APIs/obj/Debug/StewartTitle.Argano.APIs.pdb
+/StewartTitle.Argano.APIs/bin/Debug/StewartTitle.Argano.APIs.dll
+/StewartTitle.Argano.APIs/bin/Debug/StewartTitle.Argano.APIs.pdb
+/.vs/StewartTitle.Argano.Plugins/CopilotIndices/17.14.670.39694
