@@ -1317,6 +1317,7 @@ namespace StewartTitle.Argano.APIs.Utils
                 Guid transactionRoleId = service.Create(transactionRoleEntity);
                 tracingService.Trace($"Transaction role created with ID {transactionRoleId}.");
             }
+
             else
             {
                 transactionRoleEntity.Id = transactionRoleEntityId;
