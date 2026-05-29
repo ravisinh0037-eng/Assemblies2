@@ -26,25 +26,28 @@ namespace StewartTitle.Argano.APIs.Utils
         private string partiesStringJson = null;
         private IPluginExecutionContext context;
 
-        public void ProcessTransaction(IOrganizationService service, ITracingService tracingService, InboundTPSTransactionParty party, InboundTPSTransactionItem transaction, bool isTransaction, string payloadString, IPluginExecutionContext contextExecution)
+        public void ProcessTransaction(IOrganizationService service, ITracingService tracingService, InboundTPSTransactionItem transaction, bool isTransaction, string payloadString, IPluginExecutionContext contextExecution)
         {
-            ResetVariables();
             partiesStringJson = payloadString;
             context = contextExecution;
-            tracingService.Trace($"ProductionTransactionProcessor started.");
-
-            if (isTransaction)
-            {
-                tracingService.Trace("isTransaction = true passed to ProductionTransactionProcessor. This processor only handles Production (false). Exiting.");
-                return;
-            }
+            tracingService.Trace($"ProductionProcessor.ProcessTransaction started. TransactionID: {transaction.transactionID}");
 
             try
             {
                 #region Process
-                if (party.Account != null && !string.IsNullOrEmpty(party.Account.accountID) && !string.IsNullOrEmpty(party.Account.accountName))
+                UpsertTransaction(service, tracingService, transaction);
+
+                foreach (InboundTPSTransactionParty party in transaction.parties)
                 {
-                    UpsertAccount(service, tracingService, party);
+                    tracingService.Trace($"Processing party: {party.firstName} {party.lastName}, Role: {party.roleInFile}");
+                    ResetPartyVariables();
+                    tracingService.Trace($"{party.accountID}");
+                    if (!string.IsNullOrEmpty(party.accountID) && !string.IsNullOrEmpty(party.accountName))
+                    {
+                        tracingService.Trace($"Inside Create Update Accoun");
+                        UpsertAccount(service, tracingService, party);
+                    }
+
                 }
                 #endregion
 
@@ -59,102 +62,59 @@ namespace StewartTitle.Argano.APIs.Utils
         #region CREATE / UPDATE ACCOUNT - 459987
         private void UpsertAccount(IOrganizationService service, ITracingService tracingService, InboundTPSTransactionParty party)
         {
-            tracingService.Trace($"Searching account: {party.Account.accountID}");
+            tracingService.Trace($"Searching account: {party.accountID}");
+            QueryExpression query = new QueryExpression("account");
+            query.ColumnSet = new ColumnSet("accountid", "statecode");
+            query.Criteria.AddCondition("stt_accountfinanceidtext", ConditionOperator.Equal, party.accountID);
 
-            QueryExpression accountQuery = new QueryExpression("account");
-            accountQuery.ColumnSet = new ColumnSet("accountid", "statecode", "name", "address1_line1", "address1_line2", "address1_city", "telephone1", "stt_countyid", "stt_zipcodeid", "stt_stateid");
-            accountQuery.Criteria.AddCondition("stt_accountfinanceidtext", ConditionOperator.Equal, party.Account.accountID);
+            EntityCollection results = service.RetrieveMultiple(query);
 
-            EntityCollection existing = service.RetrieveMultiple(accountQuery);
-
-            if (existing.Entities.Count == 0)
+            if (results.Entities.Count == 0)
             {
-                tracingService.Trace("Account not found - creating new account");
+                tracingService.Trace("Account not found. Creating.");
                 Entity account = new Entity("account");
+                account["stt_accountfinanceidtext"] = party.accountID;
+                account["name"] = party.accountName;
+                if (!string.IsNullOrEmpty(party.accountAddress1))
+                {
+                    account["address1_line1"] = party.accountAddress1;
+                }
+                if (!string.IsNullOrEmpty(party.accountAddress2))
+                {
+                    account["address1_line2"] = party.accountAddress2;
+                }
+                if (!string.IsNullOrEmpty(party.accountCity))
+                {
+                    account["address1_city"] = party.accountCity;
+                }
+                if (!string.IsNullOrEmpty(party.accountPhoneNumber))
+                {
+                    account["telephone1"] = party.accountPhoneNumber;
+                }
+                account["stt_countyid"] = GetLookupByName(service, party.accountCounty + " County", "stt_county", "stt_countyid", "stt_name");
+                account["stt_stateid"] = GetLookupByAbbr(service, party.accountState, "stt_state", "stt_stateid", "stt_abbreviation");
+                account["stt_zipcodeid"] = GetLookupByName(service, party.accountZip, "stt_zipcode", "stt_zipcodeid", "stt_name");
 
-                account["stt_accountfinanceidtext"] = party.Account.accountID;
-                account["name"] = party.Account.accountName;
-
-                if (!string.IsNullOrEmpty(party.Account.accountAddress1))
-                {
-                    account["address1_line1"] = party.Account.accountAddress1;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountAddress2))
-                {
-                    account["address1_line2"] = party.Account.accountAddress2;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountCity))
-                {
-                    account["address1_city"] = party.Account.accountCity;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountPhoneNumber))
-                {
-                    account["telephone1"] = party.Account.accountPhoneNumber;
-                }
-                account["stt_countyid"] = GetLookupByName(service, party.Account.accountCounty + " County", "stt_county", "stt_countyid", "stt_name");
-                account["stt_zipcodeid"] = GetLookupByName(service, party.Account.accountZip, "stt_zipcode", "stt_zipcodeid", "stt_name");
-                account["stt_stateid"] = GetLookupByAbbr(service, party.Account.accountState, "stt_state", "stt_stateid", "stt_abbreviation");
                 accountId = service.Create(account);
                 tracingService.Trace($"Account created: {accountId}");
             }
             else
             {
-                Entity existingAccount = existing.Entities[0];
-                accountId = existingAccount.Id;
-                tracingService.Trace($"Account found - {accountId}. Updating.");
-                Entity accountToUpdate = new Entity("account") { Id = accountId };
-
-                bool hasChanges = false;
-
-                if (existingAccount.GetAttributeValue<OptionSetValue>("statecode")?.Value != 0)
+                accountId = results.Entities[0].Id;
+                tracingService.Trace($"Account found: {accountId}");
+                if (results.Entities[0].GetAttributeValue<OptionSetValue>("statecode")?.Value != 0)
                 {
-                    accountToUpdate["statecode"] = new OptionSetValue(0);
-                    accountToUpdate["statuscode"] = new OptionSetValue(1);
-                    hasChanges = true;
-                    tracingService.Trace("Account marked for reactivation.");
+                    Entity reactivate = new Entity("account", accountId);
+                    reactivate["statecode"] = new OptionSetValue(0);
+                    reactivate["statuscode"] = new OptionSetValue(1);
+                    service.Update(reactivate);
+                    tracingService.Trace("Account reactivated.");
                 }
 
-                if (!string.IsNullOrEmpty(party.Account.accountName) && existingAccount.GetAttributeValue<string>("name") != party.Account.accountName)
-                {
-                    accountToUpdate["name"] = party.Account.accountName;
-                    hasChanges = true;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountAddress1) && existingAccount.GetAttributeValue<string>("address1_line1") != party.Account.accountAddress1)
-                {
-                    accountToUpdate["address1_line1"] = party.Account.accountAddress1;
-                    hasChanges = true;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountAddress2) && existingAccount.GetAttributeValue<string>("address1_line2") != party.Account.accountAddress2)
-                {
-                    accountToUpdate["address1_line2"] = party.Account.accountAddress2;
-                    hasChanges = true;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountCity) && existingAccount.GetAttributeValue<string>("address1_city") != party.Account.accountCity)
-                {
-                    accountToUpdate["address1_city"] = party.Account.accountCity;
-                    hasChanges = true;
-                }
-                if (!string.IsNullOrEmpty(party.Account.accountPhoneNumber) && existingAccount.GetAttributeValue<string>("telephone1") != party.Account.accountPhoneNumber)
-                {
-                    accountToUpdate["telephone1"] = party.Account.accountPhoneNumber;
-                    hasChanges = true;
-                }
-                accountToUpdate["stt_countyid"] = GetLookupByName(service, party.Account.accountCounty + " County", "stt_county", "stt_countyid", "stt_name");
-                accountToUpdate["stt_zipcodeid"] = GetLookupByName(service, party.Account.accountZip, "stt_zipcode", "stt_zipcodeid", "stt_name");
-                accountToUpdate["stt_stateid"] = GetLookupByAbbr(service, party.Account.accountState, "stt_state", "stt_stateid", "stt_abbreviation");
-                hasChanges = true;
-
-                if (hasChanges)
-                {
-                    service.Update(accountToUpdate);
-                    tracingService.Trace($"Account updated: {accountId}");
-                }
-                else
-                {
-                    tracingService.Trace($"Account already up to date: {accountId}");
-                }
             }
+
         }
+
         #endregion
 
         #region CREATE / UPDATE CONTACT
@@ -162,61 +122,100 @@ namespace StewartTitle.Argano.APIs.Utils
         #endregion
 
         #region CREATE / UPDATE TRANSACTION - 459993
-        public void ProcessTransactionRecord(IOrganizationService service, ITracingService tracingService, InboundTPSTransactionItem transaction, Guid directingContactId)
+        private void UpsertTransaction(IOrganizationService service, ITracingService tracingService, InboundTPSTransactionItem transaction)
         {
-            Entity transactionEntity = currentTransaction != null ? new Entity("stt_transaction") { Id = currentTransaction.Id } : new Entity("stt_transaction");
-            bool transactionExists = currentTransaction != null;
-            //bool txExists = currentTransaction != null && !currentTransaction.Id.Equals(Guid.Empty);
+            tracingService.Trace($"Searching transaction: {transaction.transactionID}");
+            QueryExpression query = new QueryExpression("stt_transaction");
+            query.ColumnSet = new ColumnSet("stt_transactionid", "statecode", "stt_filenumber", "stt_transactionfinanceidtext", "stt_officelocationbranchid", "stt_marketid", "ownerid");
+            query.Criteria.AddCondition("stt_transactionfinanceidtext", ConditionOperator.Equal, transaction.transactionID);
 
-            if (transactionExists)
+            EntityCollection results = service.RetrieveMultiple(query);
+
+            Entity createUpdateTransaction = new Entity("stt_transaction");
+            bool TrsancationExists = results.Entities.Count > 0;
+
+            if (TrsancationExists)
             {
-                transactionEntity.Id = currentTransaction.Id;
-                tracingService.Trace($"Transaction exists: {transactionEntity.Id}");
+                tracingService.Trace("Transaction found. Will update.");
+                createUpdateTransaction.Id = results.Entities[0].Id;
+                transactionId = createUpdateTransaction.Id;
             }
-
-            if (!string.IsNullOrEmpty(transaction.propertyAddress1))
+            if (!string.IsNullOrEmpty(transaction.propertyStreet1))
             {
-                transactionEntity["stt_address1"] = transaction.propertyAddress1;
+                createUpdateTransaction["stt_address1"] = transaction.propertyStreet1;
             }
-
-            if (!string.IsNullOrEmpty(transaction.propertyAddress2))
+            if (!string.IsNullOrEmpty(transaction.propertyStreet2))
             {
-                transactionEntity["stt_address2"] = transaction.propertyAddress2;
+                createUpdateTransaction["stt_address2"] = transaction.propertyStreet2;
             }
-
             if (!string.IsNullOrEmpty(transaction.propertyCity))
             {
-                transactionEntity["stt_city"] = transaction.propertyCity;
+                createUpdateTransaction["stt_city"] = transaction.propertyCity;
             }
             if (!string.IsNullOrEmpty(transaction.propertyCounty))
             {
-                transactionEntity["stt_countyid"] = GetLookupByName(service, transaction.propertyCounty + " County", "stt_county", "stt_countyid", "stt_name");
+                createUpdateTransaction["stt_countyid"] = GetLookupByName(service, transaction.propertyCounty + " County", "stt_county", "stt_countyid", "stt_name");
             }
-
             if (!string.IsNullOrEmpty(transaction.propertyState))
             {
-                transactionEntity["stt_stateid"] = GetLookupByAbbr(service, transaction.propertyState, "stt_state", "stt_stateid", "stt_abbreviation");
+                createUpdateTransaction["stt_stateid"] = GetLookupByAbbr(service, transaction.propertyState, "stt_state", "stt_stateid", "stt_abbreviation");
             }
             if (!string.IsNullOrEmpty(transaction.propertyZip))
             {
-                transactionEntity["stt_zipcodeid"] = GetLookupByName(service, transaction.propertyZip, "stt_zipcode", "stt_zipcodeid", "stt_name");
+                createUpdateTransaction["stt_zipcodeid"] = GetLookupByName(service, transaction.propertyZip, "stt_zipcode", "stt_zipcodeid", "stt_name");
+            }
+            if (!string.IsNullOrEmpty(transaction.salesPrice))
+            {
+                createUpdateTransaction["stt_salesprice"] = new Money(Convert.ToDecimal(transaction.salesPrice));
+            }
+            if (!string.IsNullOrEmpty(transaction.loanAmount))
+            {
+                createUpdateTransaction["stt_loanamount"] = new Money(Convert.ToDecimal(transaction.loanAmount));
+            }
+            if (!string.IsNullOrEmpty(transaction.titleFee))
+            {
+                createUpdateTransaction["stt_titlefee"] = new Money(Convert.ToDecimal(transaction.titleFee));
+            }
+            if (!string.IsNullOrEmpty(transaction.escrowFee))
+            {
+                createUpdateTransaction["stt_escrowfee"] = new Money(Convert.ToDecimal(transaction.escrowFee));
+            }
+            if (!string.IsNullOrEmpty(transaction.endorsement))
+            {
+                createUpdateTransaction["stt_endorsementfee"] = new Money(Convert.ToDecimal(transaction.endorsement));
+            }
+            if (!string.IsNullOrEmpty(transaction.abstractFee))
+            {
+                createUpdateTransaction["stt_abstractfee"] = new Money(Convert.ToDecimal(transaction.abstractFee));
+            }
+            if (!string.IsNullOrEmpty(transaction.BDOBranchInfo))
+            {
+                createUpdateTransaction["stt_titlecompany"] = transaction.BDOBranchInfo;
+            }
+            if (!string.IsNullOrEmpty(transaction.fileStartDate))
+            {
+                createUpdateTransaction["stt_filestarton"] = DateTime.Parse(transaction.fileStartDate);
+            }
+            if (!string.IsNullOrEmpty(transaction.finalClosingDate))
+            {
+                createUpdateTransaction["stt_finalcloseon"] = DateTime.Parse(transaction.finalClosingDate);
+            }
+            if (!string.IsNullOrEmpty(transaction.estSettlementDate))
+            {
+                createUpdateTransaction["stt_estimatedclosedon"] = DateTime.Parse(transaction.estSettlementDate);
             }
             if (!string.IsNullOrEmpty(transaction.transactionType))
             {
                 switch (transaction.transactionType.ToLower())
                 {
                     case "new sales":
-                        transactionEntity["stt_transactiontypecode"] = new OptionSetValue(924510000);
-                        break;
+                        createUpdateTransaction["stt_transactiontypecode"] = new OptionSetValue(924510000); break;
                     case "resale":
-                        transactionEntity["stt_transactiontypecode"] = new OptionSetValue(924510001);
-                        break;
+                        createUpdateTransaction["stt_transactiontypecode"] = new OptionSetValue(924510001); break;
                     case "refi":
-                        transactionEntity["stt_transactiontypecode"] = new OptionSetValue(924510002);
-                        break;
+                        createUpdateTransaction["stt_transactiontypecode"] = new OptionSetValue(924510002); break;
                     default:
-                        transactionEntity["stt_transactiontypecode"] = new OptionSetValue(198730001);
-                        break;
+                        createUpdateTransaction["stt_transactiontypecode"] = new OptionSetValue(198730001); break;
                 }
             }
             if (!string.IsNullOrEmpty(transaction.fileStatus))
@@ -224,51 +223,32 @@ namespace StewartTitle.Argano.APIs.Utils
                 switch (transaction.fileStatus.ToLower())
                 {
                     case "open":
-                        transactionEntity["stt_transactionstatuscode"] = new OptionSetValue(924510000);
-                        break;
+                        createUpdateTransaction["stt_transactionstatuscode"] = new OptionSetValue(924510000); break;
                     case "closed":
-                        transactionEntity["stt_transactionstatuscode"] = new OptionSetValue(924510000);
-                        break;
+                        createUpdateTransaction["stt_transactionstatuscode"] = new OptionSetValue(924510001); break;
                     case "cancelled":
-                        transactionEntity["stt_transactionstatuscode"] = new OptionSetValue(924510000);
-                        break;
+                        createUpdateTransaction["stt_transactionstatuscode"] = new OptionSetValue(924510002); break;
                 }
             }
-            if (!string.IsNullOrEmpty(transaction.loanAmount))
+            createUpdateTransaction["stt_istransaction"] = false; // Production
+            createUpdateTransaction["stt_filenumber"] = transaction.fileNumber;
+            if (!TrsancationExists)
             {
-                transactionEntity["stt_loanamount"] = new Money(Convert.ToDecimal(transaction.loanAmount));
-            }
-            if (!string.IsNullOrEmpty(transaction.salesPrice))
-            {
-                transactionEntity["stt_salesprice"] = new Money(Convert.ToDecimal(transaction.salesPrice));
-            }
-            if (!string.IsNullOrEmpty(transaction.titleFee))
-            {
-                transactionEntity["stt_titlefee"] = new Money(Convert.ToDecimal(transaction.titleFee));
-            }
-            if (!string.IsNullOrEmpty(transaction.escrowFee))
-            {
-                transactionEntity["stt_escrowfee"] = new Money(Convert.ToDecimal(transaction.escrowFee));
-            }
-            transactionEntity["stt_istransaction"] = false;
-
-            transactionEntity["stt_filenumber"] = transaction.fileNumber;
-
-            if (!transactionExists)
-            {
-                transactionEntity["stt_transactionfinanceidtext"] = transaction.transactionID;
-                UpsertRequest upsertReq = new UpsertRequest { Target = transactionEntity };
-                UpsertResponse upsertResp = (UpsertResponse)service.Execute(upsertReq);
-                transactionId = upsertResp.Target.Id;
+                createUpdateTransaction["stt_transactionfinanceidtext"] = transaction.transactionID;
+                UpsertRequest upsertRequest = new UpsertRequest { Target = createUpdateTransaction };
+                UpsertResponse upsertResponse = (UpsertResponse)service.Execute(upsertRequest);
+                transactionId = upsertResponse.Target.Id;
                 tracingService.Trace($"Transaction created/upserted: {transactionId}");
             }
             else
             {
-                service.Update(transactionEntity);
+                service.Update(createUpdateTransaction);
                 tracingService.Trace($"Transaction updated: {transactionId}");
             }
-        }
 
+            fileNumber = transaction.fileNumber;
+
+        }
         #endregion
 
         #region CREATE / UPDATE TRANSACTION ROLE
@@ -276,17 +256,10 @@ namespace StewartTitle.Argano.APIs.Utils
         #endregion
 
         #region Helpers
-        private void ResetVariables()
+        private void ResetPartyVariables()
         {
             accountId = Guid.Empty;
             contactId = Guid.Empty;
-            transactionId = Guid.Empty;
-
-            marketEntity = null;
-            currentOfficeLocationBranch = null;
-            currentTransaction = null;
-            owner = null;
-            fileNumber = null;
 
             primaryEmailSet = false;
             primaryPhoneSet = false;

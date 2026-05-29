@@ -4,6 +4,7 @@ using StewartTitle.Argano.APIs.Utils;
 using System;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Collections.Generic;
 
 namespace StewartTitle.Argano.APIs
 {
@@ -26,44 +27,39 @@ namespace StewartTitle.Argano.APIs
             {
                 if (context.InputParameters.Keys.Contains("payload"))
                 {
-                    #region Extract and Validate JSON Payload
                     string payloadString = (string)context.InputParameters["payload"];
-
                     tracingService.Trace($"Raw payload received: {payloadString}");
 
-                    try
+                    InboundTPSTransactionPayload payload = null;
+                    string trimmed = payloadString.Trim();
+
+                    JObject jsonObj = JObject.Parse(trimmed);
+
+                    if (jsonObj.ContainsKey("transactions"))
                     {
-                        JObject jsonObj = JObject.Parse(payloadString);
-                        foreach (var key in jsonObj.Properties())
+                        tracingService.Trace("Payload is wrapped transactions array.");
+                        payload = JsonConvert.DeserializeObject<InboundTPSTransactionPayload>(trimmed);
+                    }
+                    else if (jsonObj.ContainsKey("transactionID"))
+                    {
+                        tracingService.Trace("Payload is single transaction object.");
+                        var singleTx = JsonConvert.DeserializeObject<InboundTPSTransactionItem>(trimmed);
+                        payload = new InboundTPSTransactionPayload
                         {
-                            tracingService.Trace($"Top-level JSON key found: '{key.Name}'");
-                        }
+                            transactions = new List<InboundTPSTransactionItem> { singleTx }
+                        };
                     }
-                    catch (Exception jsonEx)
+                    else
                     {
-                        tracingService.Trace($"JSON parse debug failed: {jsonEx.Message}");
+                        throw new InvalidPluginExecutionException("Payload format not recognized. Expected 'transactions' array or single transaction object.");
                     }
 
-                    InboundTPSTransactionPayload payload = JsonConvert.DeserializeObject<InboundTPSTransactionPayload>(payloadString);
-
-
-                    tracingService.Trace($"Deserialized payload is null: {payload == null}");
-                    if (payload != null)
+                    if (payload == null || payload.transactions == null || payload.transactions.Count == 0)
                     {
-                        tracingService.Trace($"payload.transactions is null: {payload.transactions == null}");
-                        if (payload.transactions != null)
-                        {
-                            tracingService.Trace($"payload.transactions count: {payload.transactions.Count}");
-                        }
+                        throw new InvalidPluginExecutionException("Transaction payload is invalid or empty.");
                     }
 
-                    if (payload == null || payload.transactions == null)
-                    {
-                        throw new InvalidPluginExecutionException("Transaction payload is invalid.");
-                    }
-
-                    tracingService.Trace($"Payload deserialized successfully. Transaction count: {payload.transactions.Count}");
-                    #endregion
+                    tracingService.Trace($"Total transactions to process: {payload.transactions.Count}");
 
                     int totalRecords = CountRecordsToProcess(tracingService, payload);
 
@@ -71,25 +67,17 @@ namespace StewartTitle.Argano.APIs
                     {
                         tracingService.Trace($"Valid amount of records. Total: {totalRecords}");
 
-                        for (int i = 0; i < payload.transactions.Count; i++)
+                        foreach (InboundTPSTransactionItem transaction in payload.transactions)
                         {
-                            InboundTPSTransactionItem transaction = payload.transactions[i];
-
                             if (transaction.parties == null || transaction.parties.Count == 0)
                             {
                                 tracingService.Trace($"Transaction {transaction.transactionID} has no parties. Skipping.");
                                 continue;
                             }
 
-                            tracingService.Trace($"Processing Transaction: {transaction.transactionID} with {transaction.parties.Count} partie(s).");
+                            tracingService.Trace($"Processing Transaction: {transaction.transactionID} with {transaction.parties.Count} party(ies).");
 
-                            for (int j = 0; j < transaction.parties.Count; j++)
-                            {
-                                InboundTPSTransactionParty party = transaction.parties[j];
-                                tracingService.Trace($"Processing Party: {party.enterpriseID} under Transaction: {transaction.transactionID}.");
-
-                                productionProcessor.ProcessTransaction(service, tracingService, party, transaction, false, payloadString, context);
-                            }
+                            productionProcessor.ProcessTransaction(service, tracingService, transaction, false, payloadString, context);
                         }
                     }
                     else

@@ -9,17 +9,11 @@ namespace StewartTitle.Argano.APIs.Models
 {
     public class InboundTPSTransactionParty
     {
-        [JsonProperty("enterpriseID")]
-        public string enterpriseID { get; set; }
-
-        [JsonProperty("UUID")]
-        public string UUID { get; set; }
+        [JsonProperty("partyID")]
+        public string partyID { get; set; }
 
         [JsonProperty("partySystem")]
         public string partySystem { get; set; }
-
-        [JsonProperty("partyID")]
-        public string partyID { get; set; }
 
         [JsonProperty("firstName")]
         public string firstName { get; set; }
@@ -54,37 +48,49 @@ namespace StewartTitle.Argano.APIs.Models
         [JsonProperty("primaryEmail")]
         public string primaryEmail { get; set; }
 
-        [JsonProperty("relatedEmail")]
-        public string relatedEmail { get; set; }
+        [JsonProperty("contactFinanceIDText")]
+        public string contactFinanceIDText { get; set; }
 
-        [JsonProperty("businessAddress1")]
-        public string businessAddress1 { get; set; }
+        [JsonProperty("roleInFile")]
+        public string roleInFile { get; set; }
 
-        [JsonProperty("businessAddress2")]
-        public string businessAddress2 { get; set; }
+        [JsonProperty("directingPartyFlag")]
+        public bool directingPartyFlag { get; set; }
 
-        [JsonProperty("businessCity")]
-        public string businessCity { get; set; }
+        [JsonProperty("accountID")]
+        public string accountID { get; set; }
 
-        [JsonProperty("businessCounty")]
-        public string businessCounty { get; set; }
+        [JsonProperty("accountSystem")]
+        public string accountSystem { get; set; }
 
-        [JsonProperty("businessState")]
-        public string businessState { get; set; }
+        [JsonProperty("accountName")]
+        public string accountName { get; set; }
 
-        [JsonProperty("businessZip")]
-        public string businessZip { get; set; }
+        [JsonProperty("accountAddress1")]
+        public string accountAddress1 { get; set; }
 
-        [JsonProperty("businessPhoneNumber")]
-        public string businessPhoneNumber { get; set; }
+        [JsonProperty("accountAddress2")]
+        public string accountAddress2 { get; set; }
 
-        [JsonProperty("multiMatch")]
-        public string multiMatch { get; set; }
+        [JsonProperty("accountCity")]
+        public string accountCity { get; set; }
 
-        [JsonProperty("matchedEnterpriseID")]
-        public string[] matchedEnterpriseID { get; set; }
+        [JsonProperty("accountCounty")]
+        public string accountCounty { get; set; }
 
-        [JsonProperty("account")]
-        public InboundTPSAccount Account { get; set; }
+        [JsonProperty("accountState")]
+        public string accountState { get; set; }
+
+        [JsonProperty("accountZip")]
+        public string accountZip { get; set; }
+
+        [JsonProperty("accountPhoneNumber")]
+        public string accountPhoneNumber { get; set; }
+
+        [JsonProperty("accountCountry")]
+        public string accountCountry { get; set; }
+
+        [JsonProperty("accountFinanceIDText")]
+        public string accountFinanceIDText { get; set; }
     }
 }
