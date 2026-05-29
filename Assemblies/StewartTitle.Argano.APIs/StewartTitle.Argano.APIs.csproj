@@ -122,6 +122,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Class1.cs" />
     <Compile Include="Models\InboundMSA.cs" />
     <Compile Include="Models\InboundTPSAccount.cs" />
     <Compile Include="Models\InboundTPSParties.cs" />
